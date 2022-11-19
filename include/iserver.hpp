@@ -3,9 +3,21 @@
 #ifndef __H_ISERVER__
 #define __H_ISERVER__
 
+#ifdef __cplusplus
+    #define EXTERNC extern "C"
+#else
+    #define EXTERNC
+#endif // !__cplusplus
+
+#ifdef CPPSERV_EXPORTS
+    #define  CPPSERV_API  EXTERNC __declspec(dllexport)
+#else
+    #define  CPPSERV_API  EXTERNC __declspec(dllimport)
+    #pragma comment(lib, "cppserv")
+#endif // !CPPSERV_EXPORTS
+
 #include <router/irouter.hpp>
 
-#include <memory>
 #include <deque>
 
 namespace __N_SERVER__
@@ -29,9 +41,7 @@ namespace __N_SERVER__
         virtual bool listen() const noexcept = 0;
     };
 
-    std::shared_ptr<IServer>createServer();
+    CPPSERV_API IServer* createServer();
 } // !__N_SERVER__
-
-using SERVER = std::shared_ptr<__N_SERVER__::IServer>;
 
 #endif // !__H_ISERVER__

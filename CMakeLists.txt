@@ -19,9 +19,6 @@ include(FetchContent)
 # boost
 find_package(Boost 1.78.0 REQUIRED)
 
-#project name
-set(PROJECT_NAME cppserv)
-
 # app directories
 set(APP_TESTS_DIR ./tests)
 set(APP_SAMPLES_DIR ./samples)
@@ -29,14 +26,16 @@ set(APP_MODULES_DIR ./modules)
 set(APP_SOURCE_DIR ./src)
 
 # project include directories
-set(APP_INCLUDE_DIRS ${APP_SOURCE_DIR}
+set(APP_INCLUDE_DIRS ./include
+                     ${APP_SOURCE_DIR}
                      ${APP_SOURCE_DIR}/common/
                      ${APP_SOURCE_DIR}/packet/implementations/)
 
 # project source files
 file(GLOB_RECURSE APP_SOURCE_FILES CONFIGURE_DEPENDS ${APP_SOURCE_DIR}/*.cpp ${APP_SOURCE_DIR}/*.hpp)
 
-# project
+#project
+set(PROJECT_NAME cppserv)
 project(${PROJECT_NAME} VERSION 1.0)
 
 # build project
@@ -45,11 +44,12 @@ add_compile_options(
    $<$<CONFIG:Debug>:/MTd>
    $<$<CONFIG:Release>:/MT>)
    
-add_library(${PROJECT_NAME} ${APP_SOURCE_FILES})
+add_library(${PROJECT_NAME} SHARED ${APP_SOURCE_FILES})
+target_compile_definitions(${PROJECT_NAME} PRIVATE CPPSERV_EXPORTS)
 target_include_directories(${PROJECT_NAME} PRIVATE ${APP_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
 target_link_directories(${PROJECT_NAME} PRIVATE ${APP_SOURCE_DIR}/xfs/lib)
 
-# tests
+# build tests
 if (APP_BUILD_TESTS)
 
     # googletest
@@ -80,10 +80,10 @@ if (APP_BUILD_TESTS)
     endforeach()
 endif(APP_BUILD_TESTS)
 
-#samples
+# build samples
 if (APP_BUILD_SAMPLES)
     
-    set(SAMPLE_PROJECTS sample_1)
+    set(SAMPLE_PROJECTS sample)
     foreach(SAMPLE_PROJECT ${SAMPLE_PROJECTS})
         project(${SAMPLE_PROJECT} VERSION 1.0)
         add_compile_options(
