@@ -214,7 +214,9 @@ namespace __N_BEAST__
                 self_.res_ = sp;
 
                 // Write the response
-                http::async_write(self_.stream_, *sp, beast::bind_front_handler(
+                http::async_write(
+                    self_.stream_, 
+                    *sp, beast::bind_front_handler(
                         &session::on_write,
                         self_.shared_from_this(),
                         sp->need_eof()));

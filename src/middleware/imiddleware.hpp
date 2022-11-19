@@ -11,7 +11,7 @@
 
 namespace __N_MIDDLEWARE__
 {
-    using MIDDLEWARE_LAMBDA = std::function<void(REQUEST, RESPONSE)>;
+    using LAMBDA = std::function<void(REQUEST, RESPONSE)>;
 
     class IMiddleware
     {
@@ -24,7 +24,11 @@ namespace __N_MIDDLEWARE__
         IMiddleware& operator = (const IMiddleware&) = delete;
         IMiddleware& operator = (IMiddleware&&) = delete;
         virtual ~IMiddleware() = default;
+
+        virtual void run(REQUEST, RESPONSE) noexcept = 0;
     };
+
+    std::shared_ptr<IMiddleware> createMiddleware(LAMBDA) noexcept;
 } // !__N_MIDDLEWARE__
 
 using MIDDLEWARE = std::shared_ptr<__N_MIDDLEWARE__::IMiddleware>;

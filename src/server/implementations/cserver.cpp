@@ -38,7 +38,7 @@ namespace __N_SERVER__
         return true;
     }
     
-    IServer* createServer()
+    Server* createServer()
     {
         return new CServer;
     }

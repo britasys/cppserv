@@ -3,36 +3,28 @@
 #ifndef __H_IROUTER__
 #define __H_IROUTER__
 
-#include <request/irequest.hpp>
-#include <response/iresponse.hpp>
-#include <middleware/imiddleware.hpp>
+#include <controller/icontroller.hpp>
 
 #include <memory>
-#include <functional>
 
 namespace __N_ROUTER__
 {
-    using ROUTER_LAMBDA = std::function<void(REQUEST, RESPONSE, MIDDLEWARE)>;
-
     class IRouter
     {
     private:
     protected:
-        std::string m_route{"/"};
-        ROUTER_LAMBDA m_lambda{};
-
     public:
-        IRouter() = delete;
-        IRouter(const IRouter&) = delete;
-        IRouter(IRouter&&) = delete;
-        IRouter& operator = (const IRouter&) = delete;
-        IRouter& operator = (IRouter&&) = delete;
+        IRouter() = default;
+        IRouter(const IRouter&) = default;
+        IRouter(IRouter&&) = default;
+        IRouter& operator = (const IRouter&) = default;
+        IRouter& operator = (IRouter&&) = default;
         virtual ~IRouter() = default;
 
-        IRouter(const std::string route, ROUTER_LAMBDA lambda) noexcept : m_route{ route }, m_lambda{ lambda } {}
+        virtual void route(REQUEST, RESPONSE) noexcept = 0;
     };
 
-    std::shared_ptr<IRouter>createRouter(const std::string, ROUTER_LAMBDA) noexcept;
+    std::shared_ptr<IRouter>createRouter(const std::string, CONTROLLER) noexcept;
 } // !__N_ROUTER__
 
 using ROUTER = std::shared_ptr<__N_ROUTER__::IRouter>;

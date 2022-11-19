@@ -1,9 +1,15 @@
 #include "crouter.hpp"
 
 namespace __N_ROUTER__
-{    
-    std::shared_ptr<IRouter>createRouter(const std::string route, ROUTER_LAMBDA lambda) noexcept
+{
+
+    void CRouter::route(REQUEST request, RESPONSE response) noexcept
     {
-        return std::make_shared<CRouter>(route, lambda);
+        this->m_controller->run(request, response);
+    }
+    
+    std::shared_ptr<IRouter>createRouter(const std::string route, CONTROLLER controller) noexcept
+    {
+        return std::make_shared<CRouter>(route, controller);
     }
 } // !__N_ROUTER__
