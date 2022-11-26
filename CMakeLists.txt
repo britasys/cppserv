@@ -22,32 +22,9 @@ find_package(Boost 1.78.0 REQUIRED)
 # app directories
 set(APP_TESTS_DIR ./tests)
 set(APP_SAMPLES_DIR ./samples)
-set(APP_MODULES_DIR ./modules)
-set(APP_SOURCE_DIR ./src)
 
 # project include directories
-set(APP_INCLUDE_DIRS ./include
-                     ${APP_SOURCE_DIR}
-                     ${APP_SOURCE_DIR}/common/
-                     ${APP_SOURCE_DIR}/packet/implementations/)
-
-# project source files
-file(GLOB_RECURSE APP_SOURCE_FILES CONFIGURE_DEPENDS ${APP_SOURCE_DIR}/*.cpp ${APP_SOURCE_DIR}/*.hpp)
-
-#project
-set(PROJECT_NAME cppserv)
-project(${PROJECT_NAME} VERSION 1.0)
-
-# build project
-add_compile_options(
-   $<$<CONFIG:>:/MT>
-   $<$<CONFIG:Debug>:/MTd>
-   $<$<CONFIG:Release>:/MT>)
-   
-add_library(${PROJECT_NAME} SHARED ${APP_SOURCE_FILES})
-target_compile_definitions(${PROJECT_NAME} PRIVATE CPPSERV_EXPORTS)
-target_include_directories(${PROJECT_NAME} PRIVATE ${APP_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
-target_link_directories(${PROJECT_NAME} PRIVATE ${APP_SOURCE_DIR}/xfs/lib)
+set(APP_INCLUDE_DIRS ./include)
 
 # build tests
 if (APP_BUILD_TESTS)
