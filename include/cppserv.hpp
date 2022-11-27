@@ -8,6 +8,7 @@
 
 #include <string>
 #include <deque>
+#include <unordered_map>
 #include <functional>
 #include <memory>
 #include <algorithm>
@@ -17,6 +18,7 @@ namespace __N_CPPSERV__
 {
     namespace beast = boost::beast;         // from <boost/beast.hpp>
     namespace http = beast::http;           // from <boost/beast/http.hpp>
+    namespace websocket = beast::websocket; // from <boost/beast/websocket.hpp>
     namespace net = boost::asio;            // from <boost/asio.hpp>
     using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 
@@ -71,7 +73,7 @@ namespace __N_CPPSERV__
     typedef struct _request : public _packet
     {
         REQUEST_HEADER_METHOD method{ REQUEST_HEADER_METHOD::METHOD_NA };
-        std::string target;
+        std::string uri{};
     } REQUEST, * LPREQUEST, ** LPPREQUEST;
 
     //******************************************************************************************
@@ -170,13 +172,13 @@ namespace __N_CPPSERV__
 
     typedef struct _router
     {
-        std::string route{};
+        std::string path{};
         LAMBDA controller{};
-        LAMBDA middleware{};
+        LAMBDA middleware{ [] (REQUEST&, RESPONSE&) { return true; }};
 
         bool run(REQUEST& request, RESPONSE& response) noexcept
         {
-            if (!std::strcmp(this->route.c_str(), request.target.c_str()))
+            if (!std::strcmp(this->path.c_str(), request.uri.c_str()))
                 if (this->middleware(request, response))
                     return this->controller(request, response);
 
@@ -207,9 +209,9 @@ namespace __N_CPPSERV__
 
     REQUEST getRequest(http::request<http::string_body> request)
     {
-        __N_CPPSERV__::REQUEST l_request{};
+        REQUEST l_request{};
         l_request.method = getMethod(request.method());
-        l_request.target.assign(request.target().data(), request.target().size());
+        l_request.uri.assign(request.target().data(), request.target().size());
         l_request.body.assign(request.body().data(), request.body().size());
 
         return l_request;
@@ -228,10 +230,6 @@ namespace __N_CPPSERV__
         return l_response;
     }
 
-    // This function produces an HTTP response for the given
-    // request. The type of the response object depends on the
-    // contents of the request, so the interface requires the
-    // caller to pass a generic lambda for receiving the response.
     template<typename Body, typename Allocator, typename Send>
     inline void handle_request(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send, std::deque<ROUTER> routers)
     {
@@ -305,8 +303,6 @@ namespace __N_CPPSERV__
         for (l_router; l_router != routers.end(); l_router++)
             if (l_router->run(l_request, l_response))
             {
-                std::cout << l_response.body << std::endl;
-
                 http::response<http::string_body>l_res = getResponse(l_response, req);
 
                 // Respond to HEAD request
@@ -338,15 +334,15 @@ namespace __N_CPPSERV__
     // SESSION
 
     // Handles an HTTP server connection
-    typedef struct _session : public std::enable_shared_from_this<_session>
+    typedef struct _session_http : public std::enable_shared_from_this<_session_http>
     {
         // This is the C++11 equivalent of a generic lambda.
         // The function object is used to send an HTTP message.
         struct send_lambda
         {
-            _session& self_;
+            _session_http& self_;
 
-            explicit send_lambda(_session& self) : self_(self) {}
+            explicit send_lambda(_session_http& self) : self_(self) {}
 
             template<bool isRequest, class Body, class Fields>
             void operator () (http::message<isRequest, Body, Fields>&& msg) const
@@ -364,7 +360,7 @@ namespace __N_CPPSERV__
                 http::async_write(
                     self_.stream_, 
                     *sp, beast::bind_front_handler(
-                        &_session::on_write,
+                        &_session_http::on_write,
                         self_.shared_from_this(),
                         sp->need_eof()));
             }
@@ -380,81 +376,175 @@ namespace __N_CPPSERV__
 
     public:
         // Take ownership of the stream
-        _session(tcp::socket&& socket, std::deque<ROUTER> routers) : stream_(std::move(socket)), lambda_(*this), m_routers{ routers } {}
+        _session_http(tcp::socket&& socket, std::deque<ROUTER> routers) : stream_(std::move(socket)), lambda_(*this), m_routers{ routers } {}
 
     
-    // Start the asynchronous operation
-    void run()
-    {
-        do_read();
-    }
-
-    void do_read()
-    {
-        // Make the request empty before reading,
-        // otherwise the operation behavior is undefined.
-        req_ = {};
-
-        // Set the timeout.
-        stream_.expires_after(std::chrono::seconds(30));
-
-        // Read a request
-        http::async_read(stream_, buffer_, req_,
-            beast::bind_front_handler(
-                &_session::on_read,
-                shared_from_this()));
-    }
-
-    void on_read(beast::error_code ec, std::size_t bytes_transferred)
-    {
-        boost::ignore_unused(bytes_transferred);
-
-        // This means they closed the connection
-        if (ec == http::error::end_of_stream)
-            return do_close();
-
-        if (ec)
-            return fail(ec, "read");
-
-        // Send the response
-        handle_request(std::move(req_), lambda_, this->m_routers);
-    }
-
-    void on_write(bool close, beast::error_code ec, std::size_t bytes_transferred)
-    {
-        boost::ignore_unused(bytes_transferred);
-
-        if (ec)
-            return fail(ec, "write");
-
-        if (close)
+        // Start the asynchronous operation
+        void run()
         {
-            // This means we should close the connection, usually because
-            // the response indicated the "Connection: close" semantic.
-            return do_close();
+            do_read();
         }
 
-        // We're done with the response so delete it
-        res_ = nullptr;
+        void do_read()
+        {
+            // Make the request empty before reading,
+            // otherwise the operation behavior is undefined.
+            req_ = {};
 
-        // Read another request
-        do_read();
-    }
+            // Set the timeout.
+            stream_.expires_after(std::chrono::seconds(30));
 
-    void do_close()
+            // Read a request
+            http::async_read(stream_, buffer_, req_,
+                beast::bind_front_handler(
+                    &_session_http::on_read,
+                    shared_from_this()));
+        }
+
+        void on_read(beast::error_code ec, std::size_t bytes_transferred)
+        {
+            boost::ignore_unused(bytes_transferred);
+
+            // This means they closed the connection
+            if (ec == http::error::end_of_stream)
+                return do_close();
+
+            if (ec)
+                return fail(ec, "read");
+
+            // Send the response
+            handle_request(std::move(req_), lambda_, this->m_routers);
+        }
+
+        void on_write(bool close, beast::error_code ec, std::size_t bytes_transferred)
+        {
+            boost::ignore_unused(bytes_transferred);
+
+            if (ec)
+                return fail(ec, "write");
+
+            if (close)
+            {
+                // This means we should close the connection, usually because
+                // the response indicated the "Connection: close" semantic.
+                return do_close();
+            }
+
+            // We're done with the response so delete it
+            res_ = nullptr;
+
+            // Read another request
+            do_read();
+        }
+
+        void do_close()
+        {
+            // Send a TCP shutdown
+            beast::error_code ec;
+            stream_.socket().shutdown(tcp::socket::shutdown_send, ec);
+
+            // At this point the connection is closed gracefully
+        }
+    } HTTP, * LPHTTP, ** LPPHTTP;
+    
+    typedef struct _session_websocket : public std::enable_shared_from_this<_session_websocket>
     {
-        // Send a TCP shutdown
-        beast::error_code ec;
-        stream_.socket().shutdown(tcp::socket::shutdown_send, ec);
+        websocket::stream<beast::tcp_stream> ws_;
+        beast::flat_buffer buffer_;
 
-        // At this point the connection is closed gracefully
-    }
-    } SESSION, * LPSESSION, ** LPPSESSION;
+    public:
+        // Take ownership of the socket
+        explicit _session_websocket(tcp::socket&& socket, std::deque<ROUTER> routers) : ws_(std::move(socket)) {}
+
+        // Get on the correct executor
+        void run()
+        {
+            // We need to be executing within a strand to perform async operations
+            // on the I/O objects in this session. Although not strictly necessary
+            // for single-threaded contexts, this example code is written to be
+            // thread-safe by default.
+            net::dispatch(ws_.get_executor(), beast::bind_front_handler(&_session_websocket::on_run, shared_from_this()));
+        }
+
+        // Start the asynchronous operation
+        void on_run()
+        {
+            // Set suggested timeout settings for the websocket
+            ws_.set_option(
+                websocket::stream_base::timeout::suggested(
+                    beast::role_type::server));
+
+            // Set a decorator to change the Server of the handshake
+            ws_.set_option(websocket::stream_base::decorator(
+                [](websocket::response_type& res)
+                {
+                    res.set(http::field::server,
+                        std::string(BOOST_BEAST_VERSION_STRING) +
+                            " websocket-server-async");
+                }));
+            // Accept the websocket handshake
+            ws_.async_accept(
+                beast::bind_front_handler(
+                    &_session_websocket::on_accept,
+                    shared_from_this()));
+        }
+
+        void
+        on_accept(beast::error_code ec)
+        {
+            if(ec)
+                return fail(ec, "accept");
+
+            // Read a message
+            do_read();
+        }
+
+        void do_read()
+        {
+            // Read a message into our buffer
+            ws_.async_read(buffer_, beast::bind_front_handler(&_session_websocket::on_read, shared_from_this()));
+        }
+
+        void on_read(beast::error_code ec, std::size_t bytes_transferred)
+        {
+            boost::ignore_unused(bytes_transferred);
+
+            // This indicates that the session was closed
+            if(ec == websocket::error::closed)
+                return;
+
+            if(ec)
+                return fail(ec, "read");
+
+            // Echo the message
+            ws_.text(ws_.got_text());
+            ws_.async_write(
+                buffer_.data(),
+                beast::bind_front_handler(
+                    &_session_websocket::on_write,
+                    shared_from_this()));
+        }
+
+        void on_write(beast::error_code ec, std::size_t bytes_transferred)
+        {
+            boost::ignore_unused(bytes_transferred);
+
+            if(ec)
+                return fail(ec, "write");
+
+            // Clear the buffer
+            buffer_.consume(buffer_.size());
+
+            // Do another read
+            do_read();
+        }
+    } WEBSOCKET, * LPWEBSOCKET, ** LPPWEBSOCKET;
 
     //******************************************************************************************
     // LISTENER
 
-    typedef struct _listener : public std::enable_shared_from_this<_listener>
+    template <typename SESSION>
+    struct _listener : public std::enable_shared_from_this<_listener<SESSION>>
     {
         std::string m_address{ "0.0.0.0" };
         unsigned short m_port{ 8080 };
@@ -540,27 +630,30 @@ namespace __N_CPPSERV__
             // Accept another connection
             do_accept();
         }
-    } LISTENER, * LPLISTENER, ** LPPLISTENER;
+    };
+    
+    template <typename T>
+    using LISTENER = _listener<T>;
 
     //******************************************************************************************
     // SERVER
     
-    typedef struct _server
+    template <typename SESSION>
+    struct _server
     {
         std::deque<__N_CPPSERV__::ROUTER> routers{};
 
-        bool run() const noexcept
-        {            
-            std::string address = "0.0.0.0";
-            unsigned short port = 8080;
-            unsigned short threads = 5;
-
+        bool run(std::string address = std::string{ "0.0.0.0" }, unsigned short port = 8080, unsigned short threads = 5) const noexcept
+        {
             // Create and launch a listening port
-           std::make_shared<LISTENER>(address, port, threads, this->routers)->listen();
+           std::make_shared<LISTENER<SESSION>>(address, port, threads, this->routers)->listen();
 
             return true;
         }
-    } SERVER, * LPSERVER, ** LPPSERVER;
+    };
+    
+    template <typename SESSION>
+    using SERVER = _server<SESSION>;
 
 } // !__N_CPPSERV__
 
