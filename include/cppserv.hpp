@@ -452,11 +452,11 @@ namespace __N_CPPSERV__
         websocket::stream<beast::tcp_stream> ws_;
         beast::flat_buffer buffer_;
 
-    public:
-        // Take ownership of the socket
-        explicit _session_websocket(tcp::socket&& socket, std::deque<ROUTER> routers) : ws_(std::move(socket)) {}
+        std::deque<ROUTER> m_routers{};
 
-        // Get on the correct executor
+    public:
+        explicit _session_websocket(tcp::socket&& socket, std::deque<ROUTER> routers) : ws_(std::move(socket)), m_routers{ routers } {}
+
         void run()
         {
             // We need to be executing within a strand to perform async operations
@@ -466,7 +466,6 @@ namespace __N_CPPSERV__
             net::dispatch(ws_.get_executor(), beast::bind_front_handler(&_session_websocket::on_run, shared_from_this()));
         }
 
-        // Start the asynchronous operation
         void on_run()
         {
             // Set suggested timeout settings for the websocket
@@ -489,8 +488,7 @@ namespace __N_CPPSERV__
                     shared_from_this()));
         }
 
-        void
-        on_accept(beast::error_code ec)
+        void on_accept(beast::error_code ec)
         {
             if(ec)
                 return fail(ec, "accept");
@@ -510,19 +508,16 @@ namespace __N_CPPSERV__
             boost::ignore_unused(bytes_transferred);
 
             // This indicates that the session was closed
-            if(ec == websocket::error::closed)
+            if (ec == websocket::error::closed)
                 return;
 
-            if(ec)
+            if (ec)
                 return fail(ec, "read");
 
-            // Echo the message
             ws_.text(ws_.got_text());
-            ws_.async_write(
-                buffer_.data(),
-                beast::bind_front_handler(
-                    &_session_websocket::on_write,
-                    shared_from_this()));
+            std::string input_data{ boost::asio::buffer_cast<const char*>(buffer_.data()), bytes_transferred };
+            std::string output_data{ input_data };
+            ws_.async_write(boost::asio::buffer(output_data.c_str(), output_data.size()), beast::bind_front_handler(&_session_websocket::on_write, shared_from_this()));
         }
 
         void on_write(beast::error_code ec, std::size_t bytes_transferred)
