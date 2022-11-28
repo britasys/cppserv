@@ -60,7 +60,7 @@ endif(APP_BUILD_TESTS)
 # build samples
 if (APP_BUILD_SAMPLES)
     
-    set(SAMPLE_PROJECTS sample)
+    set(SAMPLE_PROJECTS cppserv_sample)
     foreach(SAMPLE_PROJECT ${SAMPLE_PROJECTS})
         project(${SAMPLE_PROJECT} VERSION 1.0)
         add_compile_options(
