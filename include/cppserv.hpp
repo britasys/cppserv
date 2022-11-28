@@ -189,7 +189,7 @@ namespace __N_CPPSERV__
     //******************************************************************************************
     // HANDLER
 
-    REQUEST_HEADER_METHOD getMethod(const http::verb method) noexcept
+    inline REQUEST_HEADER_METHOD getMethod(const http::verb method) noexcept
     {
         switch (method)
         {
@@ -207,7 +207,7 @@ namespace __N_CPPSERV__
         return REQUEST_HEADER_METHOD::METHOD_NA;
     }
 
-    REQUEST getRequest(http::request<http::string_body> request)
+    inline REQUEST getRequest(http::request<http::string_body> request)
     {
         REQUEST l_request{};
         l_request.method = getMethod(request.method());
@@ -217,7 +217,7 @@ namespace __N_CPPSERV__
         return l_request;
     }
 
-    http::response<http::string_body> getResponse(RESPONSE response, http::request<http::string_body> request)
+    inline http::response<http::string_body> getResponse(RESPONSE response, http::request<http::string_body> request)
     {
         http::response<http::string_body> l_response{ (http::status)response.status, request.version() };
         l_response.set(http::field::server, BOOST_BEAST_VERSION_STRING);
